@@ -29,6 +29,7 @@ def get_player_games(player_name):
 data = [
     {"Jugador": "Nikola Jokic", "Prop": "AST", "Linea": 8.5},
     {"Jugador": "Luka Doncic", "Prop": "PTS", "Linea": 28.5},
+    {"Jugador": "Stephen Curry", "Prop": "FG3M", "Linea": 4.5},
 ]
 
 df = pd.DataFrame(data)
@@ -58,17 +59,35 @@ for i, row in df.iterrows():
         
         st.write(f"🔥 Hit Rate últimos 10: {hits}/{total} ({porcentaje}%)")
         
-        # GRAFICO
-        fig, ax = plt.subplots()
-        
-        colores = ["green" if v > linea else "red" for v in valores]
-        
-        ax.bar(range(len(valores)), valores, color=colores)
-        ax.axhline(linea)
-        
-        ax.set_title(f"Tendencia últimos 10 partidos")
-        ax.set_ylabel(stat)
-        
+        # ------------------------
+        # GRAFICO PRO
+        # ------------------------
+        fig, ax = plt.subplots(figsize=(6,3))
+
+        colores = ["#00ff88" if v > linea else "#ff4d4d" for v in valores]
+
+        ax.bar(range(len(valores)), valores, color=colores, edgecolor='white', linewidth=1)
+
+        # Línea de la apuesta
+        ax.axhline(linea, linestyle='--', linewidth=2)
+
+        # Estilo limpio
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        # Fondo oscuro
+        ax.set_facecolor('#0e1117')
+        fig.patch.set_facecolor('#0e1117')
+
+        # Texto blanco
+        ax.tick_params(colors='white')
+        ax.yaxis.label.set_color('white')
+        ax.xaxis.label.set_color('white')
+        ax.title.set_color('white')
+
+        ax.set_title("Últimos 10 partidos", fontsize=10)
+        ax.set_ylabel(stat, fontsize=9)
+
         st.pyplot(fig)
         
     except:
