@@ -8,7 +8,7 @@ from nba_api.stats.static import players
 st.set_page_config(page_title="7AM BETS AI", layout="wide")
 
 st.title("🔥 7AM BETS AI")
-st.subheader("Scanner inteligente (copia desde la casa sin editar)")
+st.subheader("Extractor automático (copia TODA la página)")
 
 # ------------------------
 # FUNCIONES
@@ -51,9 +51,9 @@ def buscar_jugador(texto):
 # ------------------------
 # INPUT
 # ------------------------
-st.markdown("## ✍️ Copia y pega directo desde la casa")
+st.markdown("## ✍️ Pega TODA la página aquí")
 
-input_text = st.text_area("")
+input_text = st.text_area("", height=300)
 
 # ------------------------
 # ANALISIS
@@ -69,36 +69,31 @@ if input_text:
             jugador = buscar_jugador(linea)
             stat = detectar_stat(linea)
             
-            # buscar números
             numeros = re.findall(r"\d+\.\d+", linea)
             
-            if len(numeros) < 2:
-                continue
-            
-            linea_apuesta = float(numeros[0])
-            cuota = float(numeros[1])
-            
-            if jugador is None or stat is None:
-                continue
-            
-            df = get_player_games(jugador)
-            valores = df[stat].values
-            
-            hits = np.sum(valores > linea_apuesta)
-            prob = hits / len(valores)
-            
-            implied = 1 / cuota
-            value = prob - implied
-            
-            resultados.append({
-                "Jugador": jugador,
-                "Stat": stat,
-                "Linea": linea_apuesta,
-                "Prob %": round(prob*100,1),
-                "Cuota": cuota,
-                "Value": round(value,3)
-            })
-            
+            if jugador and stat and len(numeros) >= 2:
+                
+                linea_apuesta = float(numeros[0])
+                cuota = float(numeros[1])
+                
+                df = get_player_games(jugador)
+                valores = df[stat].values
+                
+                hits = np.sum(valores > linea_apuesta)
+                prob = hits / len(valores)
+                
+                implied = 1 / cuota
+                value = prob - implied
+                
+                resultados.append({
+                    "Jugador": jugador,
+                    "Stat": stat,
+                    "Linea": linea_apuesta,
+                    "Prob %": round(prob*100,1),
+                    "Cuota": cuota,
+                    "Value": round(value,3)
+                })
+                
         except:
             continue
     
@@ -109,11 +104,11 @@ if input_text:
         st.markdown("## 🏆 Mejores Picks")
         st.dataframe(df_final, use_container_width=True)
         
-        st.markdown("## 🔥 TOP PICKS")
+        st.markdown("## 🔥 TOP 5")
         
-        for _, row in df_final.head(3).iterrows():
+        for _, row in df_final.head(5).iterrows():
             st.success(
                 f"{row['Jugador']} | {row['Stat']} {row['Linea']} | Prob: {row['Prob %']}% | Value: {row['Value']}"
             )
     else:
-        st.error("No se pudieron analizar los datos")
+        st.error("No se detectaron props automáticamente")
