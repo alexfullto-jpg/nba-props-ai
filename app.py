@@ -1,163 +1,129 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-from nba_api.stats.endpoints import scoreboardv2, commonteamroster, playergamelog
+from nba_api.stats.endpoints import playergamelog
+from nba_api.stats.static import players
 
 st.set_page_config(page_title="7AM BETS AI", layout="wide")
 
 st.title("🔥 7AM BETS AI")
-st.subheader("Selector inteligente NBA")
+st.subheader("Scanner de Props (encuentra el mejor pick automático)")
 
 # ------------------------
-# OBTENER PARTIDOS HOY
+# FUNCIONES
 # ------------------------
 @st.cache_data
-def get_games_today():
-    games = scoreboardv2.ScoreboardV2()
-    df = games.get_data_frames()[0]
-    return df[['GAME_ID','HOME_TEAM_ID','VISITOR_TEAM_ID','GAME_STATUS_TEXT']]
-
-games = get_games_today()
-
-# ------------------------
-# MAPA EQUIPOS
-# ------------------------
-team_dict = {
-    1610612737: "Hawks",
-    1610612738: "Celtics",
-    1610612751: "Nets",
-    1610612766: "Hornets",
-    1610612741: "Bulls",
-    1610612739: "Cavaliers",
-    1610612742: "Mavericks",
-    1610612743: "Nuggets",
-    1610612765: "Pistons",
-    1610612744: "Warriors",
-    1610612745: "Rockets",
-    1610612754: "Pacers",
-    1610612746: "Clippers",
-    1610612747: "Lakers",
-    1610612763: "Grizzlies",
-    1610612748: "Heat",
-    1610612749: "Bucks",
-    1610612750: "Timberwolves",
-    1610612740: "Pelicans",
-    1610612752: "Knicks",
-    1610612760: "Thunder",
-    1610612753: "Magic",
-    1610612755: "76ers",
-    1610612756: "Suns",
-    1610612757: "Blazers",
-    1610612758: "Kings",
-    1610612759: "Spurs",
-    1610612761: "Raptors",
-    1610612762: "Jazz",
-    1610612764: "Wizards"
-}
-
-# ------------------------
-# SELECT PARTIDO
-# ------------------------
-st.markdown("## 📅 Partidos de Hoy")
-
-games_list = []
-
-for _, g in games.iterrows():
-    home = team_dict.get(g['HOME_TEAM_ID'], str(g['HOME_TEAM_ID']))
-    away = team_dict.get(g['VISITOR_TEAM_ID'], str(g['VISITOR_TEAM_ID']))
+def get_player_games(player_name):
+    player = players.find_players_by_full_name(player_name)[0]
+    player_id = player['id']
     
-    games_list.append(f"{away} vs {home}")
+    df = playergamelog.PlayerGameLog(player_id=player_id).get_data_frames()[0]
+    df['GAME_DATE'] = pd.to_datetime(df['GAME_DATE'])
+    
+    df = df.sort_values("GAME_DATE", ascending=False).head(10)
+    
+    return df
 
-selected_game = st.selectbox("Selecciona partido", games_list)
+def traducir_stat(texto):
+    texto = texto.lower()
+    
+    if "pts" in texto:
+        return "PTS"
+    if "ast" in texto:
+        return "AST"
+    if "reb" in texto:
+        return "REB"
+    if "triples" in texto or "3pt" in texto:
+        return "FG3M"
+    
+    return None
 
-# ------------------------
-# SELECCION EQUIPO
-# ------------------------
-selected_team = st.selectbox("Selecciona equipo", ["Local", "Visitante"])
-
-# Obtener team_id
-game_index = games_list.index(selected_game)
-game_data = games.iloc[game_index]
-
-team_id = game_data['HOME_TEAM_ID'] if selected_team == "Local" else game_data['VISITOR_TEAM_ID']
-
-# ------------------------
-# ROSTER
-# ------------------------
-@st.cache_data
-def get_roster(team_id):
-    roster = commonteamroster.CommonTeamRoster(team_id=team_id)
-    return roster.get_data_frames()[0]
-
-roster = get_roster(team_id)
-
-player_name = st.selectbox("Selecciona jugador", roster['PLAYER'].values)
-
-# ------------------------
-# STAT
-# ------------------------
-stat_map = {
-    "Puntos": "PTS",
-    "Asistencias": "AST",
-    "Rebotes": "REB",
-    "Triples": "FG3M"
-}
-
-stat_label = st.selectbox("Selecciona stat", list(stat_map.keys()))
-stat = stat_map[stat_label]
+def buscar_jugador(nombre):
+    lista = players.get_players()
+    
+    for p in lista:
+        if nombre.lower() in p['full_name'].lower():
+            return p['full_name']
+    
+    return None
 
 # ------------------------
-# LINEA
+# INPUT MASIVO
 # ------------------------
-linea = st.number_input("Ingresa línea", value=10.0)
+st.markdown("## ✍️ Pega TODOS los props")
+
+input_text = st.text_area("""
+Ejemplo:
+garland pts 6.5 1.67
+kawhi triples 3.5 1.97
+dunn ast 3.5 1.67
+marshall pts 3.5 2.00
+""")
 
 # ------------------------
-# ANALIZAR
+# ANALISIS
 # ------------------------
-if st.button("Analizar"):
-
-    try:
-        from nba_api.stats.static import players
+if input_text:
+    
+    resultados = []
+    
+    lineas = input_text.strip().split("\n")
+    
+    for linea_texto in lineas:
+        try:
+            partes = linea_texto.split()
+            
+            nombre = partes[0]
+            stat_texto = partes[1]
+            linea = float(partes[2])
+            cuota = float(partes[3])
+            
+            jugador = buscar_jugador(nombre)
+            stat = traducir_stat(stat_texto)
+            
+            if jugador is None or stat is None:
+                continue
+            
+            df = get_player_games(jugador)
+            valores = df[stat].values
+            
+            hits = np.sum(valores > linea)
+            prob = hits / len(valores)
+            
+            implied = 1 / cuota
+            value = prob - implied
+            
+            resultados.append({
+                "Jugador": jugador,
+                "Stat": stat,
+                "Linea": linea,
+                "Prob": round(prob*100,1),
+                "Cuota": cuota,
+                "Value": round(value,3)
+            })
+            
+        except:
+            continue
+    
+    if len(resultados) > 0:
         
-        player_id = None
-        for p in players.get_players():
-            if p['full_name'] == player_name:
-                player_id = p['id']
+        df_final = pd.DataFrame(resultados)
         
-        df = playergamelog.PlayerGameLog(player_id=player_id).get_data_frames()[0]
-        df['GAME_DATE'] = pd.to_datetime(df['GAME_DATE'])
-        df = df.sort_values("GAME_DATE", ascending=False).head(10)
-
-        valores = df[stat].values
-        fechas = df['GAME_DATE'].dt.strftime('%m-%d').values
-
-        hits = np.sum(valores > linea)
-        prob = hits / len(valores)
-
-        st.write(f"🔥 Probabilidad: {round(prob*100,1)}%")
-
-        # GRAFICO
-        fig, ax = plt.subplots(figsize=(4,2))
-
-        colores = ["#00ff88" if v > linea else "#ff4d4d" for v in valores]
-
-        bars = ax.bar(range(len(valores)), valores, color=colores)
-
-        ax.axhline(linea, linestyle='--')
-
-        ax.set_xticks(range(len(fechas)))
-        ax.set_xticklabels(fechas, fontsize=6)
-
-        ax.set_facecolor('#0e1117')
-        fig.patch.set_facecolor('#0e1117')
-
-        for spine in ax.spines.values():
-            spine.set_visible(False)
-
-        ax.tick_params(colors='white', labelsize=6)
-
-        st.pyplot(fig, use_container_width=False)
-
-    except:
-        st.error("Error analizando jugador")
+        # 🔥 ORDENAR POR MEJOR VALUE
+        df_final = df_final.sort_values(by="Value", ascending=False)
+        
+        st.markdown("## 🏆 Mejores Picks")
+        st.dataframe(df_final, use_container_width=True)
+        
+        # TOP 3
+        st.markdown("## 🔥 TOP 3 DEL DÍA")
+        
+        top = df_final.head(3)
+        
+        for _, row in top.iterrows():
+            st.success(
+                f"{row['Jugador']} | {row['Stat']} {row['Linea']} | Prob: {row['Prob']}% | Value: {row['Value']}"
+            )
+    
+    else:
+        st.error("No se pudieron analizar los datos")
