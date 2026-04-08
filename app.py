@@ -1,13 +1,14 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import re
 from nba_api.stats.endpoints import playergamelog
 from nba_api.stats.static import players
 
 st.set_page_config(page_title="7AM BETS AI", layout="wide")
 
 st.title("🔥 7AM BETS AI")
-st.subheader("Scanner de Props (encuentra el mejor pick automático)")
+st.subheader("Scanner inteligente (copia desde la casa sin editar)")
 
 # ------------------------
 # FUNCIONES
@@ -24,41 +25,35 @@ def get_player_games(player_name):
     
     return df
 
-def traducir_stat(texto):
+def detectar_stat(texto):
     texto = texto.lower()
     
-    if "pts" in texto:
-        return "PTS"
     if "ast" in texto:
         return "AST"
     if "reb" in texto:
         return "REB"
-    if "triples" in texto or "3pt" in texto:
+    if "pts" in texto or "puntos" in texto:
+        return "PTS"
+    if "3" in texto or "triple" in texto:
         return "FG3M"
     
     return None
 
-def buscar_jugador(nombre):
+def buscar_jugador(texto):
     lista = players.get_players()
     
     for p in lista:
-        if nombre.lower() in p['full_name'].lower():
+        if p['full_name'].lower() in texto.lower():
             return p['full_name']
     
     return None
 
 # ------------------------
-# INPUT MASIVO
+# INPUT
 # ------------------------
-st.markdown("## ✍️ Pega TODOS los props")
+st.markdown("## ✍️ Copia y pega directo desde la casa")
 
-input_text = st.text_area("""
-Ejemplo:
-garland pts 6.5 1.67
-kawhi triples 3.5 1.97
-dunn ast 3.5 1.67
-marshall pts 3.5 2.00
-""")
+input_text = st.text_area("")
 
 # ------------------------
 # ANALISIS
@@ -67,19 +62,21 @@ if input_text:
     
     resultados = []
     
-    lineas = input_text.strip().split("\n")
+    lineas = input_text.split("\n")
     
-    for linea_texto in lineas:
+    for linea in lineas:
         try:
-            partes = linea_texto.split()
+            jugador = buscar_jugador(linea)
+            stat = detectar_stat(linea)
             
-            nombre = partes[0]
-            stat_texto = partes[1]
-            linea = float(partes[2])
-            cuota = float(partes[3])
+            # buscar números
+            numeros = re.findall(r"\d+\.\d+", linea)
             
-            jugador = buscar_jugador(nombre)
-            stat = traducir_stat(stat_texto)
+            if len(numeros) < 2:
+                continue
+            
+            linea_apuesta = float(numeros[0])
+            cuota = float(numeros[1])
             
             if jugador is None or stat is None:
                 continue
@@ -87,7 +84,7 @@ if input_text:
             df = get_player_games(jugador)
             valores = df[stat].values
             
-            hits = np.sum(valores > linea)
+            hits = np.sum(valores > linea_apuesta)
             prob = hits / len(valores)
             
             implied = 1 / cuota
@@ -96,8 +93,8 @@ if input_text:
             resultados.append({
                 "Jugador": jugador,
                 "Stat": stat,
-                "Linea": linea,
-                "Prob": round(prob*100,1),
+                "Linea": linea_apuesta,
+                "Prob %": round(prob*100,1),
                 "Cuota": cuota,
                 "Value": round(value,3)
             })
@@ -105,25 +102,18 @@ if input_text:
         except:
             continue
     
-    if len(resultados) > 0:
-        
+    if resultados:
         df_final = pd.DataFrame(resultados)
-        
-        # 🔥 ORDENAR POR MEJOR VALUE
         df_final = df_final.sort_values(by="Value", ascending=False)
         
         st.markdown("## 🏆 Mejores Picks")
         st.dataframe(df_final, use_container_width=True)
         
-        # TOP 3
-        st.markdown("## 🔥 TOP 3 DEL DÍA")
+        st.markdown("## 🔥 TOP PICKS")
         
-        top = df_final.head(3)
-        
-        for _, row in top.iterrows():
+        for _, row in df_final.head(3).iterrows():
             st.success(
-                f"{row['Jugador']} | {row['Stat']} {row['Linea']} | Prob: {row['Prob']}% | Value: {row['Value']}"
+                f"{row['Jugador']} | {row['Stat']} {row['Linea']} | Prob: {row['Prob %']}% | Value: {row['Value']}"
             )
-    
     else:
         st.error("No se pudieron analizar los datos")
