@@ -1,46 +1,77 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from nba_api.stats.endpoints import playergamelog
+from nba_api.stats.static import players
 
 st.set_page_config(page_title="7AM BETS AI", layout="wide")
 
 st.title("🔥 7AM BETS AI")
 st.subheader("Props Inteligentes NBA")
 
+# ------------------------
+# FUNCION DATOS REALES
+# ------------------------
+@st.cache_data
+def get_player_games(player_name):
+    player = players.find_players_by_full_name(player_name)[0]
+    player_id = player['id']
+    
+    df = playergamelog.PlayerGameLog(player_id=player_id).get_data_frames()[0]
+    df = df.sort_values("GAME_DATE", ascending=False).head(10)
+    
+    return df
+
+# ------------------------
+# DATA BASE
+# ------------------------
 data = [
-    {"Jugador": "Luka Doncic", "Prop": "PTS", "Linea": 28.5, "Prob": 65, "Cuota": 1.85},
-    {"Jugador": "Nikola Jokic", "Prop": "AST", "Linea": 8.5, "Prob": 68, "Cuota": 1.80},
-    {"Jugador": "Stephen Curry", "Prop": "3PT", "Linea": 4.5, "Prob": 62, "Cuota": 1.90},
-    {"Jugador": "LeBron James", "Prop": "PTS", "Linea": 25.5, "Prob": 61, "Cuota": 1.85},
+    {"Jugador": "Nikola Jokic", "Prop": "AST", "Linea": 8.5},
+    {"Jugador": "Luka Doncic", "Prop": "PTS", "Linea": 28.5},
 ]
 
 df = pd.DataFrame(data)
 
-df["Value"] = df["Prob"]/100 - (1/df["Cuota"])
-
-st.sidebar.header("Filtros")
-min_prob = st.sidebar.slider("Probabilidad mínima", 50, 80, 60)
-only_value = st.sidebar.checkbox("Solo Value Bets", True)
-
-filtered_df = df[df["Prob"] >= min_prob]
-
-if only_value:
-    filtered_df = filtered_df[filtered_df["Value"] > 0]
-
+# ------------------------
+# UI
+# ------------------------
 st.markdown("## 📊 Mejores Picks del Día")
 
-for i, row in filtered_df.iterrows():
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
-
-    col1.write(f"**{row['Jugador']}**")
-    col2.write(row["Prop"])
-    col3.write(row["Linea"])
-    col4.write(f"{row['Prob']}%")
-    col5.write(row["Cuota"])
-
-    if row["Value"] > 0:
-        col6.success("VALUE")
-    else:
-        col6.error("NO")
-
-    st.button(f"Apostar Over {row['Linea']}", key=i)
+for i, row in df.iterrows():
+    
+    jugador = row["Jugador"]
+    linea = row["Linea"]
+    stat = row["Prop"]
+    
+    st.markdown(f"### {jugador} - {stat} ({linea})")
+    
+    try:
+        games = get_player_games(jugador)
+        
+        valores = games[stat].values
+        
+        # HIT RATE
+        hits = np.sum(valores > linea)
+        total = len(valores)
+        porcentaje = round((hits/total)*100, 1)
+        
+        st.write(f"🔥 Hit Rate últimos 10: {hits}/{total} ({porcentaje}%)")
+        
+        # GRAFICO
+        fig, ax = plt.subplots()
+        
+        colores = ["green" if v > linea else "red" for v in valores]
+        
+        ax.bar(range(len(valores)), valores, color=colores)
+        ax.axhline(linea)
+        
+        ax.set_title(f"Tendencia últimos 10 partidos")
+        ax.set_ylabel(stat)
+        
+        st.pyplot(fig)
+        
+    except:
+        st.error("Error cargando datos")
+    
     st.divider()
