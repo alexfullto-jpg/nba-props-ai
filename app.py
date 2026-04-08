@@ -8,7 +8,7 @@ from nba_api.stats.static import players
 st.set_page_config(page_title="7AM BETS AI", layout="wide")
 
 st.title("🔥 7AM BETS AI")
-st.subheader("Props con Líneas Reales")
+st.subheader("Props fáciles (escribe como quieras)")
 
 # ------------------------
 # FUNCION DATOS
@@ -26,71 +26,87 @@ def get_player_games(player_name):
     return df
 
 # ------------------------
-# INPUT MANUAL (AQUI PEGAS)
+# TRADUCIR STAT
 # ------------------------
-st.markdown("## ✍️ Pega tus líneas aquí")
-
-input_text = st.text_area("""
-Formato:
-Jugador,Stat,Linea,Cuota
-
-Ejemplo:
-Nikola Jokic,AST,9.5,1.80
-Luka Doncic,PTS,30.5,1.90
-Stephen Curry,FG3M,4.5,1.85
-""")
+def traducir_stat(texto):
+    texto = texto.lower()
+    
+    if "pts" in texto or "puntos" in texto:
+        return "PTS"
+    if "ast" in texto or "asist" in texto:
+        return "AST"
+    if "reb" in texto:
+        return "REB"
+    if "triples" in texto or "3pt" in texto:
+        return "FG3M"
+    
+    return None
 
 # ------------------------
-# PROCESAR INPUT
+# BUSCAR JUGADOR
+# ------------------------
+def buscar_jugador(nombre):
+    lista = players.get_players()
+    
+    for p in lista:
+        if nombre.lower() in p['full_name'].lower():
+            return p['full_name']
+    
+    return None
+
+# ------------------------
+# INPUT LIBRE
+# ------------------------
+st.markdown("## ✍️ Escribe así (sin comas)")
+st.write("Ej: jokic ast 9.5 1.80")
+
+input_text = st.text_area("")
+
+# ------------------------
+# PROCESAR
 # ------------------------
 if input_text:
-
-    filas = input_text.strip().split("\n")
-    data = []
-
-    for f in filas:
-        try:
-            j, stat, linea, cuota = f.split(",")
-            data.append({
-                "Jugador": j.strip(),
-                "Stat": stat.strip(),
-                "Linea": float(linea),
-                "Cuota": float(cuota)
-            })
-        except:
-            continue
-
-    df = pd.DataFrame(data)
-
+    
+    lineas = input_text.strip().split("\n")
+    
     st.markdown("## 📊 Resultados")
-
-    for i, row in df.iterrows():
-        
-        jugador = row["Jugador"]
-        linea = row["Linea"]
-        stat = row["Stat"]
-        cuota = row["Cuota"]
-
-        st.markdown(f"### {jugador} - {stat} ({linea})")
-
+    
+    for linea_texto in lineas:
         try:
-            games = get_player_games(jugador)
-
+            partes = linea_texto.split()
+            
+            nombre = partes[0]
+            stat_texto = partes[1]
+            linea = float(partes[2])
+            
+            cuota = float(partes[3]) if len(partes) > 3 else 1.85
+            
+            jugador_real = buscar_jugador(nombre)
+            stat = traducir_stat(stat_texto)
+            
+            if jugador_real is None or stat is None:
+                st.error(f"No se reconoce: {linea_texto}")
+                continue
+            
+            st.markdown(f"### {jugador_real} - {stat} ({linea})")
+            
+            games = get_player_games(jugador_real)
+            
             valores = games[stat].values
             fechas = games['GAME_DATE'].dt.strftime('%m-%d').values
-
+            
             # HIT RATE
             hits = np.sum(valores > linea)
             total = len(valores)
             prob = hits / total
-
+            
             # VALUE
             implied = 1 / cuota
             value = prob - implied
-
-            st.write(f"🔥 Probabilidad IA: {round(prob*100,1)}%")
+            
+            st.write(f"🔥 Probabilidad: {round(prob*100,1)}%")
             st.write(f"💰 Value: {round(value,3)}")
-
+            
             # ------------------------
             # GRAFICO
             # ------------------------
@@ -102,7 +118,6 @@ if input_text:
 
             ax.axhline(linea, linestyle='--', linewidth=1.5)
 
-            # NUMEROS
             for bar, val in zip(bars, valores):
                 ax.text(bar.get_x() + bar.get_width()/2, val - 0.5,
                         str(int(val)),
@@ -126,13 +141,13 @@ if input_text:
 
             # SEMAFORO
             if value > 0.05:
-                st.success("🟢 APUESTA (VALUE)")
+                st.success("🟢 APUESTA")
             elif value > 0:
                 st.warning("🟡 MARGINAL")
             else:
                 st.error("🔴 EVITAR")
 
         except:
-            st.error("Error con jugador")
-
+            st.error(f"Error en: {linea_texto}")
+        
         st.divider()
