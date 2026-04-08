@@ -49,7 +49,6 @@ for i, row in df.iterrows():
     
     try:
         games = get_player_games(jugador)
-        
         valores = games[stat].values
         
         # HIT RATE
@@ -60,36 +59,32 @@ for i, row in df.iterrows():
         st.write(f"🔥 Hit Rate últimos 10: {hits}/{total} ({porcentaje}%)")
         
         # ------------------------
-        # GRAFICO PRO
+        # GRAFICO PEQUEÑO PRO
         # ------------------------
-        fig, ax = plt.subplots(figsize=(6,3))
+        fig, ax = plt.subplots(figsize=(4,2))  # 👈 MÁS PEQUEÑO
 
         colores = ["#00ff88" if v > linea else "#ff4d4d" for v in valores]
 
-        ax.bar(range(len(valores)), valores, color=colores, edgecolor='white', linewidth=1)
+        ax.bar(range(len(valores)), valores, color=colores, width=0.6)
 
-        # Línea de la apuesta
-        ax.axhline(linea, linestyle='--', linewidth=2)
+        ax.axhline(linea, linestyle='--', linewidth=1.5)
 
-        # Estilo limpio
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
+        # Quitar bordes
+        for spine in ax.spines.values():
+            spine.set_visible(False)
 
         # Fondo oscuro
         ax.set_facecolor('#0e1117')
         fig.patch.set_facecolor('#0e1117')
 
-        # Texto blanco
-        ax.tick_params(colors='white')
-        ax.yaxis.label.set_color('white')
-        ax.xaxis.label.set_color('white')
-        ax.title.set_color('white')
+        # Texto pequeño
+        ax.tick_params(colors='white', labelsize=7)
+        ax.set_title("Últimos 10", fontsize=8, color='white')
+        ax.set_ylabel(stat, fontsize=7, color='white')
 
-        ax.set_title("Últimos 10 partidos", fontsize=10)
-        ax.set_ylabel(stat, fontsize=9)
+        # 👇 CLAVE: NO expandir
+        st.pyplot(fig, use_container_width=False)
 
-        st.pyplot(fig)
-        
     except:
         st.error("Error cargando datos")
     
