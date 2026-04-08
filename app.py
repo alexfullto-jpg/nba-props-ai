@@ -19,6 +19,8 @@ def get_player_games(player_name):
     player_id = player['id']
     
     df = playergamelog.PlayerGameLog(player_id=player_id).get_data_frames()[0]
+    df['GAME_DATE'] = pd.to_datetime(df['GAME_DATE'])
+    
     df = df.sort_values("GAME_DATE", ascending=False).head(10)
     
     return df
@@ -49,7 +51,13 @@ for i, row in df.iterrows():
     
     try:
         games = get_player_games(jugador)
+        
         valores = games[stat].values
+        fechas = games['GAME_DATE'].dt.strftime('%m-%d').values
+        rivales = games['MATCHUP'].values  # 👈 aquí sale vs equipo
+        
+        # Mostrar próximo matchup (último partido es referencia)
+        st.write(f"🏀 Matchups recientes: {rivales[0]}")
         
         # HIT RATE
         hits = np.sum(valores > linea)
@@ -59,15 +67,26 @@ for i, row in df.iterrows():
         st.write(f"🔥 Hit Rate últimos 10: {hits}/{total} ({porcentaje}%)")
         
         # ------------------------
-        # GRAFICO PEQUEÑO PRO
+        # GRAFICO PRO
         # ------------------------
-        fig, ax = plt.subplots(figsize=(4,2))  # 👈 MÁS PEQUEÑO
+        fig, ax = plt.subplots(figsize=(5,2.5))
 
         colores = ["#00ff88" if v > linea else "#ff4d4d" for v in valores]
 
-        ax.bar(range(len(valores)), valores, color=colores, width=0.6)
+        bars = ax.bar(range(len(valores)), valores, color=colores, width=0.6)
 
         ax.axhline(linea, linestyle='--', linewidth=1.5)
+
+        # NÚMEROS DENTRO DE LAS BARRAS
+        for bar, val in zip(bars, valores):
+            ax.text(bar.get_x() + bar.get_width()/2, val - 0.5,
+                    str(int(val)),
+                    ha='center', va='top',
+                    fontsize=7, color='black')
+
+        # FECHAS ABAJO
+        ax.set_xticks(range(len(fechas)))
+        ax.set_xticklabels(fechas, fontsize=7, color='white')
 
         # Quitar bordes
         for spine in ax.spines.values():
@@ -77,12 +96,11 @@ for i, row in df.iterrows():
         ax.set_facecolor('#0e1117')
         fig.patch.set_facecolor('#0e1117')
 
-        # Texto pequeño
+        # Texto
         ax.tick_params(colors='white', labelsize=7)
-        ax.set_title("Últimos 10", fontsize=8, color='white')
-        ax.set_ylabel(stat, fontsize=7, color='white')
+        ax.set_title("Últimos 10 partidos", fontsize=9, color='white')
+        ax.set_ylabel(stat, fontsize=8, color='white')
 
-        # 👇 CLAVE: NO expandir
         st.pyplot(fig, use_container_width=False)
 
     except:
