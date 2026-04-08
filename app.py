@@ -8,10 +8,10 @@ from nba_api.stats.static import players
 st.set_page_config(page_title="7AM BETS AI", layout="wide")
 
 st.title("🔥 7AM BETS AI")
-st.subheader("Props Inteligentes NBA")
+st.subheader("Props con Líneas Reales")
 
 # ------------------------
-# FUNCION DATOS REALES
+# FUNCION DATOS
 # ------------------------
 @st.cache_data
 def get_player_games(player_name):
@@ -26,84 +26,113 @@ def get_player_games(player_name):
     return df
 
 # ------------------------
-# DATA BASE
+# INPUT MANUAL (AQUI PEGAS)
 # ------------------------
-data = [
-    {"Jugador": "Nikola Jokic", "Prop": "AST", "Linea": 8.5},
-    {"Jugador": "Luka Doncic", "Prop": "PTS", "Linea": 28.5},
-    {"Jugador": "Stephen Curry", "Prop": "FG3M", "Linea": 4.5},
-]
+st.markdown("## ✍️ Pega tus líneas aquí")
 
-df = pd.DataFrame(data)
+input_text = st.text_area("""
+Formato:
+Jugador,Stat,Linea,Cuota
+
+Ejemplo:
+Nikola Jokic,AST,9.5,1.80
+Luka Doncic,PTS,30.5,1.90
+Stephen Curry,FG3M,4.5,1.85
+""")
 
 # ------------------------
-# UI
+# PROCESAR INPUT
 # ------------------------
-st.markdown("## 📊 Mejores Picks del Día")
+if input_text:
 
-for i, row in df.iterrows():
-    
-    jugador = row["Jugador"]
-    linea = row["Linea"]
-    stat = row["Prop"]
-    
-    st.markdown(f"### {jugador} - {stat} ({linea})")
-    
-    try:
-        games = get_player_games(jugador)
+    filas = input_text.strip().split("\n")
+    data = []
+
+    for f in filas:
+        try:
+            j, stat, linea, cuota = f.split(",")
+            data.append({
+                "Jugador": j.strip(),
+                "Stat": stat.strip(),
+                "Linea": float(linea),
+                "Cuota": float(cuota)
+            })
+        except:
+            continue
+
+    df = pd.DataFrame(data)
+
+    st.markdown("## 📊 Resultados")
+
+    for i, row in df.iterrows():
         
-        valores = games[stat].values
-        fechas = games['GAME_DATE'].dt.strftime('%m-%d').values
-        rivales = games['MATCHUP'].values  # 👈 aquí sale vs equipo
-        
-        # Mostrar próximo matchup (último partido es referencia)
-        st.write(f"🏀 Matchups recientes: {rivales[0]}")
-        
-        # HIT RATE
-        hits = np.sum(valores > linea)
-        total = len(valores)
-        porcentaje = round((hits/total)*100, 1)
-        
-        st.write(f"🔥 Hit Rate últimos 10: {hits}/{total} ({porcentaje}%)")
-        
-        # ------------------------
-        # GRAFICO PRO
-        # ------------------------
-        fig, ax = plt.subplots(figsize=(5,2.5))
+        jugador = row["Jugador"]
+        linea = row["Linea"]
+        stat = row["Stat"]
+        cuota = row["Cuota"]
 
-        colores = ["#00ff88" if v > linea else "#ff4d4d" for v in valores]
+        st.markdown(f"### {jugador} - {stat} ({linea})")
 
-        bars = ax.bar(range(len(valores)), valores, color=colores, width=0.6)
+        try:
+            games = get_player_games(jugador)
 
-        ax.axhline(linea, linestyle='--', linewidth=1.5)
+            valores = games[stat].values
+            fechas = games['GAME_DATE'].dt.strftime('%m-%d').values
 
-        # NÚMEROS DENTRO DE LAS BARRAS
-        for bar, val in zip(bars, valores):
-            ax.text(bar.get_x() + bar.get_width()/2, val - 0.5,
-                    str(int(val)),
-                    ha='center', va='top',
-                    fontsize=7, color='black')
+            # HIT RATE
+            hits = np.sum(valores > linea)
+            total = len(valores)
+            prob = hits / total
 
-        # FECHAS ABAJO
-        ax.set_xticks(range(len(fechas)))
-        ax.set_xticklabels(fechas, fontsize=7, color='white')
+            # VALUE
+            implied = 1 / cuota
+            value = prob - implied
 
-        # Quitar bordes
-        for spine in ax.spines.values():
-            spine.set_visible(False)
+            st.write(f"🔥 Probabilidad IA: {round(prob*100,1)}%")
+            st.write(f"💰 Value: {round(value,3)}")
 
-        # Fondo oscuro
-        ax.set_facecolor('#0e1117')
-        fig.patch.set_facecolor('#0e1117')
+            # ------------------------
+            # GRAFICO
+            # ------------------------
+            fig, ax = plt.subplots(figsize=(4,2))
 
-        # Texto
-        ax.tick_params(colors='white', labelsize=7)
-        ax.set_title("Últimos 10 partidos", fontsize=9, color='white')
-        ax.set_ylabel(stat, fontsize=8, color='white')
+            colores = ["#00ff88" if v > linea else "#ff4d4d" for v in valores]
 
-        st.pyplot(fig, use_container_width=False)
+            bars = ax.bar(range(len(valores)), valores, color=colores, width=0.6)
 
-    except:
-        st.error("Error cargando datos")
-    
-    st.divider()
+            ax.axhline(linea, linestyle='--', linewidth=1.5)
+
+            # NUMEROS
+            for bar, val in zip(bars, valores):
+                ax.text(bar.get_x() + bar.get_width()/2, val - 0.5,
+                        str(int(val)),
+                        ha='center', va='top',
+                        fontsize=6, color='black')
+
+            ax.set_xticks(range(len(fechas)))
+            ax.set_xticklabels(fechas, fontsize=6, color='white')
+
+            for spine in ax.spines.values():
+                spine.set_visible(False)
+
+            ax.set_facecolor('#0e1117')
+            fig.patch.set_facecolor('#0e1117')
+
+            ax.tick_params(colors='white', labelsize=6)
+            ax.set_title("Últimos 10", fontsize=7, color='white')
+            ax.set_ylabel(stat, fontsize=6, color='white')
+
+            st.pyplot(fig, use_container_width=False)
+
+            # SEMAFORO
+            if value > 0.05:
+                st.success("🟢 APUESTA (VALUE)")
+            elif value > 0:
+                st.warning("🟡 MARGINAL")
+            else:
+                st.error("🔴 EVITAR")
+
+        except:
+            st.error("Error con jugador")
+
+        st.divider()
